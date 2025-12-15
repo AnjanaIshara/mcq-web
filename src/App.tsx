@@ -395,81 +395,130 @@ export default function App() {
         ); 
     }
     return ( 
+        
         <div className="page">
-        <header className="hero">
-            <div>
-            <p className="eyebrow">MCQ Builder</p>
-            <h1>{activeQuizTitle}</h1>
-            <p className="lede">Chose from built-in samples or your own XML file.</p>
-            </div>
-        </header>
-        <main className="grid">
-            <section className="card">
-            <div className="section-head">
-                <h2>Question</h2>
-                <span className="pill">Editable</span>
-            </div>
-            <label className="field">
-                <span>Load questions from XML file (optional)</span>
-                <input type="file" accept=".xml,text/xml" onChange={(e)=> handleXmlFile(e.target.files?.[0] ?? null)} /> <small>Replace the built-in sample XML by choosing a file.</small>
+  <header className="hero">
+    <div>
+      <p className="eyebrow">MCQ Builder</p>
+      <h1>{activeQuizTitle}</h1>
+      <p className="lede">Switch between single and multi-answer modes without losing clarity.</p>
+    </div>
+  </header>
+
+  <main className="grid">
+    <section className="card preview">
+      <div className="section-head">
+        <h2>Preview</h2>
+        <span className="pill neutral">Live</span>
+      </div>
+
+      <div className="nav-row">
+        <button
+          type="button"
+          className="ghost"
+          onClick={handleBack}
+          disabled={currentIndex === 0 || !questions.length}
+        >
+          ← Back
+        </button>
+        <span className="pill neutral">
+          Question {questions.length ? currentIndex + 1 : 0} of {questions.length || 0}
+        </span>
+        <button
+          type="button"
+          className="ghost"
+          onClick={handleNext}
+          disabled={currentIndex >= questions.length - 1}
+        >
+          Next →
+        </button>
+      </div>
+
+      <div className="question-block">
+        <p className="question-text">
+          {currentQuestion?.prompt || 'Your question will appear here.'}
+        </p>
+        <p className="hint">
+          Select up to {currentQuestion?.expectedSelections ?? 1} answer(s).
+        </p>
+      </div>
+
+      <div className="choices">
+        {currentQuestion?.options.map((opt) => {
+          const selected = selectedOptionIds.includes(opt.id);
+          const inputType = currentQuestion.expectedSelections === 1 ? 'radio' : 'checkbox';
+          const limitReached = atSelectionLimit && !selected;
+
+          return (
+            <label
+              key={opt.id}
+              className={['choice', selected && 'active', limitReached && 'disabled']
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <input
+                type={inputType}
+                name="choice"
+                checked={selected}
+                disabled={limitReached}
+                onChange={() => handleSelectOption(opt.id)}
+              />
+              <span className="choice-text">{opt.text}</span>
             </label>
-            <label className="field">
-                <span>Jump to question</span>
-                <select value={currentQuestion?.id || '' } onChange={(e)=> handlePresetChange(e.target.value)}> {questions.map((preset) => ( <option key={preset.id} value={preset.id}> {preset.title} </option> ))} </select>
-                <small>Loaded from XML; you can still edit text below.</small>
-            </label> {currentQuestion ? ( <>
-                <label className="field">
-                <span>Prompt</span>
-                <input type="text" value={currentQuestion.prompt} onChange={(e)=> handlePromptChange(e.target.value)} placeholder="Type the question" /> </label>
-                <label className="field">
-                <span>Expected number of answers</span>
-                <input type="number" min={1} max={currentQuestion.options.length || 1} value={currentQuestion.expectedSelections} onChange={(e)=> handleExpectedChange(Number(e.target.value))} /> <small>Derived from XML. Capped to the number of options provided.</small>
-                </label>
-                <div className="options-head">
-                <h3>Options</h3>
-                <span className="pill neutral">Auto-sized</span>
-                </div>
-                <div className="option-list"> {currentQuestion.options.map((opt, index) => ( <div className="option-row" key={opt.id}>
-                    <label className="field compact">
-                    <span>Option {index + 1}</span>
-                    <input type="text" value={opt.text} onChange={(e)=> handleOptionTextChange(opt.id, e.target.value)} /> </label>
-                </div> ))} </div>
-            </> ) : ( <p>No questions available.</p> )}
-            </section>
-            <section className="card preview">
-            <div className="section-head">
-                <h2>Preview</h2>
-                <span className="pill neutral">Live</span>
-            </div>
-            <div className="nav-row">
-                <button type="button" className="ghost" onClick={handleBack} disabled={currentIndex===0 || !questions.length}> ← Back </button>
-                <span className="pill neutral">Question {questions.length ? currentIndex + 1 : 0} of {questions.length || 0}</span>
-                <button type="button" className="ghost" onClick={handleNext} disabled={currentIndex>= questions.length - 1} > Next → </button>
-            </div>
-            <div className="question-block">
-                <p className="question-text">{currentQuestion?.prompt || 'Your question will appear here.'}</p>
-                <p className="hint">Select up to {currentQuestion?.expectedSelections ?? 1} answer(s).</p>
-            </div>
-            <div className="choices"> {currentQuestion?.options.map((opt) => { const selected = selectedOptionIds.includes(opt.id); const inputType = currentQuestion.expectedSelections === 1 ? 'radio' : 'checkbox'; const limitReached = atSelectionLimit && !selected; return ( <label 
-                key={opt.id} 
-                className={`choice ${selected ? 'active' : ''} ${limitReached ? 'disabled' : ''}`}>
-                <input type={inputType} name="choice" checked={selected} disabled={limitReached} onChange={()=> handleSelectOption(opt.id)} /> <span className="choice-text">{opt.text}</span>
-                </label> ); })} </div> {atSelectionLimit && currentQuestion && currentQuestion.expectedSelections > 1 && ( <p className="limit-note">Reached the selection limit for this question.</p> )} <div className="actions">
-                <button type="button" className="ghost" onClick={handleCheckAnswers} disabled={!currentQuestion || !currentQuestion.correctOptionIds.length}> Check answers </button> {currentQuestion && results[currentQuestion.id] && ( 
-                    <span
-  className={`pill ${
-    results[currentQuestion.id].correctCount === results[currentQuestion.id].total
-      ? ''
-      : 'neutral'
-  }`}
-> You got {results[currentQuestion.id].correctCount} / {results[currentQuestion.id].total} correct. </span> )}
-            </div>
-            <div className="actions">
-                <button type="button" className="ghost" onClick={handleFinishQuiz} disabled={!questions.length}> Finish quiz </button> {finalScore && ( <span className={`pill ${finalScore.correct === finalScore.total ? '' : 'neutral'}`}> Final: {finalScore.correct} / {finalScore.total} </span> )}
-            </div>
-            </section>
-        </main>undefined
-        </div>    
+          );
+        })}
+      </div>
+
+      {atSelectionLimit && currentQuestion && currentQuestion.expectedSelections > 1 && (
+        <p className="limit-note">Reached the selection limit for this question.</p>
+      )}
+
+      <div className="actions">
+        <button
+          type="button"
+          className="ghost"
+          onClick={handleCheckAnswers}
+          disabled={!currentQuestion || !currentQuestion.correctOptionIds.length}
+        >
+          Check answers
+        </button>
+
+        {currentQuestion && results[currentQuestion.id] && (
+          <span
+            className={`pill ${
+              results[currentQuestion.id].correctCount === results[currentQuestion.id].total
+                ? ''
+                : 'neutral'
+            }`}
+          >
+            You got {results[currentQuestion.id].correctCount} /{' '}
+            {results[currentQuestion.id].total} correct.
+          </span>
+        )}
+      </div>
+
+      <div className="actions">
+        <button
+          type="button"
+          className="ghost"
+          onClick={handleFinishQuiz}
+          disabled={!questions.length}
+        >
+          Finish quiz
+        </button>
+
+        {finalScore && (
+          <span
+            className={`pill ${finalScore.correct === finalScore.total ? '' : 'neutral'}`}
+          >
+            Final: {finalScore.correct} / {finalScore.total}
+          </span>
+        )}
+      </div>
+    </section>
+  </main>
+</div>
+
      
     ); 
 }
