@@ -38,6 +38,32 @@ const defaultXml = `
 
 type XmlQuestion = Question & {id: string; title: string };
 
+type QuizSource = { 
+    id: string; 
+    name: string; 
+    description: string; 
+    type: 'inline' | 'url'; 
+    xml?: string; 
+    url?: string; 
+}; 
+
+const quizSources: 
+QuizSource[] = [ { 
+        id: 'default', 
+        name: 'Built-in sample quiz', 
+        description: 'Geography, primes, and flags.', 
+        type: 'inline', 
+        xml: defaultXml 
+    }, 
+    { 
+        id: 'math-basics', 
+        name: 'Math basics', 
+        description: 'Simple math and shapes.', 
+        type: 'url', 
+        url: '/quizzes/math-basics.xml' 
+    } 
+];
+
 declare global {
     interface Window {
         setMcqXml?: (xml:string) => void;
@@ -101,6 +127,13 @@ export default function App() {
     const [xmlText, setXmlText] = useState<string>(defaultXml); 
     const xmlQuestions = useMemo(() => parseQuestionsFromXml(xmlText), [xmlText]); 
     
+    const [availableSources, setAvailableSources] = useState<QuizSource[]>([quizSources[0]]); 
+    const [selectedQuizId, setSelectedQuizId] = useState<string>(quizSources[0].id); 
+    const [hasStarted, setHasStarted] = useState<boolean>(false); 
+    const [loadingQuiz, setLoadingQuiz] = useState<boolean>(false); 
+    const [loadError, setLoadError] = useState<string | null>(null); 
+    const [activeQuizTitle, setActiveQuizTitle] = useState<string>(quizSources[0].name);
+
     const [questions, setQuestions] = useState<XmlQuestion[]>(xmlQuestions); 
     const [currentIndex, setCurrentIndex] = useState<number>(0); 
     const [selections, setSelections] = useState<Record<string, string[]>>({}); 
@@ -125,15 +158,58 @@ export default function App() {
     }, [xmlQuestions]); 
     
     useEffect(() => { 
+        let cancelled = false; 
+        const load = async () => { 
+            const found: QuizSource[] = [quizSources[0]]; 
+            for (const src of quizSources.slice(1)) { 
+                if (src.type === 'url' && src.url) { 
+                    try { 
+                        const res = await fetch(src.url); 
+                        if (!res.ok) throw new Error(`Fetch failed: ${res.status}`); 
+                        const text = await res.text(); 
+                        const parsed = parseQuestionsFromXml(text); 
+                        if (parsed.length && !cancelled) { 
+                            found.push(src); 
+                        } 
+                    } catch (err) { 
+                        console.error('Skipping quiz source', src.id, err); 
+                    } 
+                } 
+            } 
+            if (!cancelled) { 
+                setAvailableSources(found); 
+            } 
+        }; 
+        load(); 
+        return () => { 
+            cancelled = true; 
+        }; 
+    }, []);
+
+    useEffect(() => { 
         const params = new URLSearchParams(window.location.search); 
         const xmlUrl = params.get('xmlUrl'); 
         if (xmlUrl) { 
             fetch(xmlUrl) 
             .then((res) => res.text()) 
-            .then((text) => setXmlText(text)) 
+            .then((text) => {
+                const parsed = parseQuestionsFromXml(text);
+                if (parsed.length) {
+                    setXmlText(text);
+                    setActiveQuizTitle('Custom URL');
+                    setHasStarted(true);
+                }
+            }) 
             .catch((err) => console.error('Failed to fetch xmlUrl', err)); 
         } 
-        window.setMcqXml = (xml: string) => setXmlText(xml); 
+        window.setMcqXml = (xml: string) => {
+            const parsed = parseQuestionsFromXml(xml);
+            if (parsed.length) {
+                setXmlText(xml);
+                setActiveQuizTitle('Custom XML');
+                setHasStarted(true);
+            }
+        }; 
         return () => { 
             window.setMcqXml = undefined; 
         }; 
@@ -163,7 +239,10 @@ export default function App() {
         if (!file) return; 
         try { 
             const text = await file.text(); 
-            setXmlText(text); setFinalScore(null); 
+            setXmlText(text); 
+            setFinalScore(null); 
+            setActiveQuizTitle(file.name);
+            setHasStarted(true);
         } catch (err) { 
             console.error('Failed to read XML file', err); 
         } 
@@ -227,6 +306,35 @@ export default function App() {
         setResults((prev) => ({ ...prev, [currentQuestion.id]: { correctCount: isCorrect ? 1 : 0, total: 1 } })); 
         setFinalScore(null); 
     }; 
+
+    const startQuiz = async (quizId?: string) => { 
+        const targetId = quizId ?? selectedQuizId; 
+        const source = availableSources.find((s) => s.id === targetId) ?? availableSources[0]; 
+        if (!source) { 
+            setLoadError('No quiz available to start.'); 
+            return; 
+        } 
+        setLoadingQuiz(true); 
+        setLoadError(null); 
+        try { let xml = source.xml ?? ''; 
+            if (source.type === 'url' && source.url) { 
+                const res = await fetch(source.url); 
+                if (!res.ok) throw new Error(`Fetch failed (${res.status})`); 
+                xml = await res.text(); 
+            } 
+            const parsed = parseQuestionsFromXml(xml); 
+            if (!parsed.length) throw new Error('No questions found in XML.'); 
+            setXmlText(xml); 
+            setActiveQuizTitle(source.name); 
+            setSelectedQuizId(source.id); 
+            setHasStarted(true); 
+        } catch (err) { 
+            console.error('Failed to start quiz', err); 
+            setLoadError('Failed to load the selected quiz.'); 
+        } finally { 
+            setLoadingQuiz(false); 
+        } 
+    };
     
     const handleNext = () => { 
         if (currentIndex < questions.length - 1) { 
@@ -250,13 +358,49 @@ export default function App() {
         setFinalScore({ correct, total: questions.length }); 
         window.scrollTo({ top: 0, behavior: 'smooth' }); 
     }; 
+
+    if (!hasStarted) { 
+        return ( 
+            <div className="page">
+            <header className="hero">
+                <div>
+                <p className="eyebrow">MCQ Builder</p>
+                <h1>Select a quiz to start</h1>
+                <p className="lede">Choose from built-in samples or your own XML file.</p>
+                </div>
+            </header>
+            <section className="card">
+                <div className="section-head">
+                <h2>Available quizzes</h2>
+                </div> {loadError && <p className="error-text">{loadError}</p>} <div className="quiz-list"> {availableSources.map((quiz) => ( <label
+  key={quiz.id}
+  className={`quiz-card ${selectedQuizId === quiz.id ? 'selected' : ''}`}
+>
+                    <input type="radio" name="quiz-source" value={quiz.id} checked={selectedQuizId===quiz.id} onChange={()=> setSelectedQuizId(quiz.id)} /> <div>
+                    <p className="quiz-title">{quiz.name}</p>
+                    <p className="quiz-desc">{quiz.description}</p>
+                    <span className="pill neutral">{quiz.type === 'inline' ? 'Built-in' : 'From file'}</span>
+                    </div>
+                </label> ))} </div>
+                <div className="actions">
+                <button type="button" className="ghost" onClick={()=> startQuiz()} disabled={loadingQuiz}> {loadingQuiz ? 'Loading…' : 'Start quiz'} </button>
+                <span className="pill neutral">or load an XML file below</span>
+                </div>
+                <label className="field" style={{ marginTop: '16px' }}>
+                <span>Load questions from XML file (optional)</span>
+                <input type="file" accept=".xml,text/xml" onChange={(e)=> handleXmlFile(e.target.files?.[0] ?? null)} /> <small>Replace the built-in sample XML by choosing a file.</small>
+                </label>
+            </section>
+            </div>
+        ); 
+    }
     return ( 
         <div className="page">
         <header className="hero">
             <div>
             <p className="eyebrow">MCQ Builder</p>
-            <h1>Craft questions and pick answers fast</h1>
-            <p className="lede">Switch between single and multi-answer modes without losing clarity.</p>
+            <h1>{activeQuizTitle}</h1>
+            <p className="lede">Chose from built-in samples or your own XML file.</p>
             </div>
         </header>
         <main className="grid">

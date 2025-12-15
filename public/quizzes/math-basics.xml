@@ -1,0 +1,28 @@
+<questions>
+	<question id="m1" title="Even number" expectedSelections="1">
+		<prompt>Which of these is an even number?</prompt>
+		<option label="A">3</option>
+		<option label="B">4</option>
+		<option label="C">7</option>
+		<option label="D">9</option>
+		<answer>B</answer>
+	</question>
+	<question id="m2" title="Prime pick" expectedSelections="1">
+		<prompt>Which of these is a prime number?</prompt>
+		<option label="A">6</option>
+		<option label="B">9</option>
+		<option label="C">11</option>
+		<option label="D">15</option>
+		<answer>C</answer>
+	</question>
+	<question id="m3" title="Shapes" expectedSelections="2">
+		<prompt>Pick the two shapes with exactly 4 sides.</prompt>
+		<option label="A">Triangle</option>
+		<option label="B">Square</option>
+		<option label="C">Rectangle</option>
+		<option label="D">Circle</option>
+		<option label="E">Pentagon</option>
+		<answer>B</answer>
+		<answer>C</answer>
+	</question>
+</questions>
